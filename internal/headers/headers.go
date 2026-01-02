@@ -53,15 +53,26 @@ func parseHeader(fieldLine []byte) (string, string, error) {
 	return string(name), string(value), nil
 }
 
-func (h *Headers) Get(name string) string {
-	return h.headers[strings.ToLower(name)]
+func (h *Headers) Get(name string) (string, bool) {
+	v, ok := h.headers[strings.ToLower(name)]
+
+	return v, ok
 }
 func (h *Headers) Set(name, value string) error {
 	if !isToken(name) {
 		return INVALID_TOKEN_IN_FIELD_NAME
 	}
 
-	h.headers[strings.ToLower(name)] = value
+	name = strings.ToLower(name)
+
+	prev, ok := h.Get(name)
+
+	if ok {
+		h.headers[name] = fmt.Sprintf("%s, %s", prev, value)
+	} else {
+		h.headers[name] = value
+	}
+
 	return nil
 }
 
