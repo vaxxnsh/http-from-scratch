@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/vaxxnsh/http-from-scratch/internal/headers"
 )
 
 type parserState string
 
 const (
-	StateInit  parserState = "init"
-	StateDone  parserState = "done"
-	StateError parserState = "error"
+	StateInit    parserState = "init"
+	StateDone    parserState = "done"
+	StateError   parserState = "error"
+	StateHeaders parserState = "headers"
 )
 
 type RequestLine struct {
@@ -23,6 +26,7 @@ type RequestLine struct {
 type Request struct {
 	RequestLine RequestLine
 	state       parserState
+	Headers     *headers.Headers
 }
 
 var MALFORMED_START_LINE = fmt.Errorf("malformed start-line")
@@ -32,7 +36,8 @@ var SEPARATOR = []byte("\r\n")
 
 func newRequest() *Request {
 	return &Request{
-		state: StateInit,
+		state:   StateInit,
+		Headers: headers.NewHeaders(),
 	}
 }
 
@@ -65,7 +70,12 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 		return nil, 0, UNSUPPORTED_HTTP_VERSION
 	}
 
-	r.HttpVersion = string(bytes.Split(parts[2], []byte("/"))[1])
+	versionParts := bytes.Split(parts[2], []byte("/"))
+
+	if len(versionParts) < 2 {
+		return nil, 0, MALFORMED_START_LINE
+	}
+	r.HttpVersion = string(versionParts[1])
 
 	return &r, read, nil
 }
@@ -75,11 +85,13 @@ func (r *Request) parse(data []byte) (int, error) {
 
 outer:
 	for {
+		currentData := data[read:]
+		fmt.Printf("state: %s\ndata: %s\n", r.state, string(currentData))
 		switch r.state {
 		case StateError:
 			return 0, REQUEST_IN_ERROR_STATE
 		case StateInit:
-			rl, n, err := parseRequestLine(data[read:])
+			rl, n, err := parseRequestLine(currentData)
 			if err != nil {
 				r.state = StateError
 				return 0, err
@@ -89,10 +101,23 @@ outer:
 			}
 			r.RequestLine = *rl
 			read += n
-			r.state = StateDone
-
+			r.state = StateHeaders
+		case StateHeaders:
+			n, done, err := r.Headers.Parse(currentData)
+			if err != nil {
+				return 0, err
+			}
+			if done {
+				r.state = StateDone
+			}
+			if n == 0 {
+				break outer
+			}
+			read += n
 		case StateDone:
 			break outer
+		default:
+			panic("somehow we have programmed poorly")
 		}
 	}
 
@@ -109,27 +134,30 @@ func (r *Request) error() bool {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := newRequest()
-
-	// Note: buffer could get overrun
 	buf := make([]byte, 1024)
 	bufLen := 0
 
 	for !request.done() && !request.error() {
 		n, err := reader.Read(buf[bufLen:])
-
-		if err != nil {
-			return nil, err
+		if n > 0 {
+			bufLen += n
+			readN, err := request.parse(buf[:bufLen])
+			if err != nil {
+				return nil, err
+			}
+			copy(buf, buf[readN:bufLen])
+			bufLen -= readN
 		}
 
-		bufLen += n
-		readN, err := request.parse(buf[:bufLen])
 		if err != nil {
+			if err == io.EOF {
+				if !request.done() {
+					return nil, io.ErrUnexpectedEOF
+				}
+				break
+			}
 			return nil, err
 		}
-
-		bufLen += readN
-		copy(buf, buf[readN:bufLen])
-		bufLen -= readN
 	}
 
 	return request, nil

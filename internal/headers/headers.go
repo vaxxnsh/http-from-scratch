@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/vaxxnsh/http-from-scratch/internal/utils"
@@ -26,9 +27,12 @@ func NewHeaders() *Headers {
 func isToken(str string) bool {
 	isValid := true
 
+	log.Printf("token to check: %s\n", str)
+
 	for _, ch := range str {
 		if !utils.IsAlphabet(ch) && !utils.IsNum(ch) && !utils.IsValidSpecial(ch) {
-			fmt.Printf("invalid token found : %s\n", string(ch))
+
+			fmt.Printf("invalid token found : %v, is num check: %v\n", ch, utils.IsNum(ch))
 			isValid = false
 			break
 		}
