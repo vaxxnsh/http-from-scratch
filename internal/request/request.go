@@ -12,9 +12,10 @@ type parserState string
 
 const (
 	StateInit    parserState = "init"
+	StateHeaders parserState = "headers"
+	StateBody    parserState = "body"
 	StateDone    parserState = "done"
 	StateError   parserState = "error"
-	StateHeaders parserState = "headers"
 )
 
 type RequestLine struct {
@@ -24,9 +25,10 @@ type RequestLine struct {
 }
 
 type Request struct {
-	RequestLine RequestLine
 	state       parserState
+	RequestLine RequestLine
 	Headers     *headers.Headers
+	Body        []byte
 }
 
 var MALFORMED_START_LINE = fmt.Errorf("malformed start-line")
@@ -51,33 +53,30 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 		return nil, 0, nil
 	}
 
-	startLine := before
-	read := len(SEPARATOR) + len(before)
-
-	parts := bytes.Split(startLine, []byte(" "))
+	read := len(before) + len(SEPARATOR)
+	parts := bytes.Split(before, []byte(" "))
 
 	if len(parts) != 3 {
 		return nil, 0, MALFORMED_START_LINE
 	}
 
-	r := RequestLine{
+	rl := RequestLine{
 		Method:        string(parts[0]),
 		RequestTarget: string(parts[1]),
 		HttpVersion:   string(parts[2]),
 	}
 
-	if !r.ValidHTTP() {
+	if !rl.ValidHTTP() {
 		return nil, 0, UNSUPPORTED_HTTP_VERSION
 	}
 
 	versionParts := bytes.Split(parts[2], []byte("/"))
-
 	if len(versionParts) < 2 {
 		return nil, 0, MALFORMED_START_LINE
 	}
-	r.HttpVersion = string(versionParts[1])
 
-	return &r, read, nil
+	rl.HttpVersion = string(versionParts[1])
+	return &rl, read, nil
 }
 
 func (r *Request) parse(data []byte) (int, error) {
@@ -86,10 +85,12 @@ func (r *Request) parse(data []byte) (int, error) {
 outer:
 	for {
 		currentData := data[read:]
-		fmt.Printf("state: %s\ndata: %s\n", r.state, string(currentData))
+
 		switch r.state {
+
 		case StateError:
 			return 0, REQUEST_IN_ERROR_STATE
+
 		case StateInit:
 			rl, n, err := parseRequestLine(currentData)
 			if err != nil {
@@ -102,22 +103,52 @@ outer:
 			r.RequestLine = *rl
 			read += n
 			r.state = StateHeaders
+
 		case StateHeaders:
 			n, done, err := r.Headers.Parse(currentData)
 			if err != nil {
+				r.state = StateError
 				return 0, err
 			}
+
+			read += n
+
 			if done {
+				if r.hasBody() {
+					r.state = StateBody
+					break outer
+				}
 				r.state = StateDone
 			}
+
 			if n == 0 {
 				break outer
 			}
-			read += n
+
+		case StateBody:
+			contentLen, err := r.Headers.GetInt("content-length", 0)
+			if err != nil {
+				r.state = StateError
+				return 0, err
+			}
+
+			if len(currentData) == 0 {
+				break outer
+			}
+
+			remaining := min(contentLen-len(r.Body), len(currentData))
+			r.Body = append(r.Body, currentData[:remaining]...)
+			read += remaining
+
+			if len(r.Body) == contentLen {
+				r.state = StateDone
+			}
+
 		case StateDone:
 			break outer
+
 		default:
-			panic("somehow we have programmed poorly")
+			panic("invalid parser state")
 		}
 	}
 
@@ -132,6 +163,11 @@ func (r *Request) error() bool {
 	return r.state == StateError
 }
 
+func (r *Request) hasBody() bool {
+	contentLen, _ := r.Headers.GetInt("content-length", 0)
+	return contentLen > 0
+}
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := newRequest()
 	buf := make([]byte, 1024)
@@ -141,10 +177,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		n, err := reader.Read(buf[bufLen:])
 		if n > 0 {
 			bufLen += n
+
 			readN, err := request.parse(buf[:bufLen])
 			if err != nil {
 				return nil, err
 			}
+
 			copy(buf, buf[readN:bufLen])
 			bufLen -= readN
 		}

@@ -10,14 +10,14 @@ import (
 func TestHeaderParsing(t *testing.T) {
 	// Test: Valid single header
 	headers := NewHeaders()
-	data := []byte("Host: localhost:42069\r\nHost: localhost:42069\r\n\r\n")
+	data := []byte("Host: localhost:42069\r\n\r\n")
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	value, ok := headers.Get("HOST")
 	require.True(t, ok)
-	assert.Equal(t, "localhost:42069, localhost:42069", value)
-	assert.Equal(t, 46, n)
+	assert.Equal(t, "localhost:42069", value)
+	assert.Equal(t, 25, n)
 	assert.True(t, done)
 
 	// Test: Invalid spacing header

@@ -3,7 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"strconv"
 	"strings"
 
 	"github.com/vaxxnsh/http-from-scratch/internal/utils"
@@ -26,9 +26,6 @@ func NewHeaders() *Headers {
 
 func isToken(str string) bool {
 	isValid := true
-
-	log.Printf("token to check: %s\n", str)
-
 	for _, ch := range str {
 		if !utils.IsAlphabet(ch) && !utils.IsNum(ch) && !utils.IsValidSpecial(ch) {
 
@@ -87,6 +84,21 @@ func (h *Headers) ForEach(cb func(n, v string)) {
 	}
 }
 
+func (h *Headers) GetInt(name string, defaultValue int) (int, error) {
+	v, ok := h.Get(name)
+
+	if !ok {
+		return defaultValue, nil
+	}
+
+	intVal, err := strconv.Atoi(v)
+
+	if err != nil {
+		return defaultValue, err
+	}
+	return intVal, nil
+}
+
 func (h *Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
@@ -98,6 +110,7 @@ func (h *Headers) Parse(data []byte) (int, bool, error) {
 		}
 
 		if idx == 0 {
+			read += len(rn)
 			done = true
 			break
 		}
