@@ -85,10 +85,10 @@ func (r *Request) parse(data []byte) (int, error) {
 outer:
 	for {
 		currentData := data[read:]
-
 		switch r.state {
 
 		case StateError:
+			fmt.Printf("got error in state - %s\n", r.state)
 			return 0, REQUEST_IN_ERROR_STATE
 
 		case StateInit:
@@ -114,11 +114,13 @@ outer:
 			read += n
 
 			if done {
+				fmt.Printf("went here state %s\n", r.state)
 				if r.hasBody() {
 					r.state = StateBody
-					break outer
+					break
 				}
 				r.state = StateDone
+				break
 			}
 
 			if n == 0 {
