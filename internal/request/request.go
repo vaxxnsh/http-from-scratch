@@ -114,7 +114,6 @@ outer:
 			read += n
 
 			if done {
-				fmt.Printf("went here state %s\n", r.state)
 				if r.hasBody() {
 					r.state = StateBody
 					break

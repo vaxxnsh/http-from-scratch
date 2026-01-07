@@ -46,7 +46,7 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return *h
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func WriteHeaders(w io.Writer, headers *headers.Headers) error {
 	b := []byte{}
 	headers.ForEach(func(n, v string) {
 		b = fmt.Appendf(b, "%s: %s\r\n", n, v)

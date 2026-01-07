@@ -78,6 +78,15 @@ func (h *Headers) Set(name, value string) error {
 	return nil
 }
 
+func (h *Headers) Replace(name, value string) error {
+	if !isToken(name) {
+		return INVALID_TOKEN_IN_FIELD_NAME
+	}
+	name = strings.ToLower(name)
+	h.headers[name] = value
+	return nil
+}
+
 func (h *Headers) ForEach(cb func(n, v string)) {
 	for n, v := range h.headers {
 		cb(n, v)
