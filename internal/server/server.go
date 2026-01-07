@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/vaxxnsh/http-from-scratch/internal/response"
 )
 
 type Server struct {
@@ -11,10 +13,19 @@ type Server struct {
 	closed bool
 }
 
-func runConnection(s *Server, conn io.ReadWriteCloser) {
-	out := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!")
-	conn.Write(out)
-	conn.Close()
+func runConnection(_ *Server, conn io.ReadWriteCloser) {
+	defer conn.Close()
+	body := []byte("Hello World!\n")
+	err := response.WriteStatusLine(conn, response.StatusOk)
+	if err != nil {
+		return
+	}
+	headers := response.GetDefaultHeaders(len(body))
+	err = response.WriteHeaders(conn, headers)
+	if err != nil {
+		return
+	}
+	conn.Write(body)
 }
 
 func runServer(s *Server, listener net.Listener) error {
