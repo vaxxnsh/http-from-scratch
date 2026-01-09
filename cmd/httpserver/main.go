@@ -1,9 +1,15 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/vaxxnsh/http-from-scratch/internal/request"
@@ -12,6 +18,8 @@ import (
 )
 
 const port = 42069
+
+var ERROR_WHILE_GETTING_CHUNKED_BODY = fmt.Errorf("error while getting chunking body")
 
 func getHtmlBodyForCode(statusCode response.StatusCode) []byte {
 	switch statusCode {
@@ -65,15 +73,68 @@ func respondWithhtml(w *response.Writer, statusCode response.StatusCode, htmlBod
 	w.WriteBody(htmlBody)
 }
 
+func sendCunkedResponse(w *response.Writer, numResponses int) error {
+	res, err := http.Get(fmt.Sprintf("https://httpbin.org/stream/%d", numResponses))
+	if err != nil {
+		return ERROR_WHILE_GETTING_CHUNKED_BODY
+	}
+	h := response.GetChunkedHeaders()
+	w.WriteStatusLine(response.StatusOk)
+	w.WriteHeaders(&h)
+	for {
+		data := make([]byte, 32)
+		n, err := res.Body.Read(data)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
+		_, err = w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+		if err != nil {
+			return err
+		}
+		_, err = w.WriteBody(data[:n])
+		if err != nil {
+			return err
+		}
+		_, err = w.WriteBody([]byte("\r\n"))
+		if err != nil {
+			return err
+		}
+	}
+	_, err = w.WriteBody([]byte("0\r\n\r\n"))
+	return err
+}
+
 func main() {
 	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
-		switch req.RequestLine.RequestTarget {
+		target := req.RequestLine.RequestTarget
+		switch target {
 		case "/yourproblem":
 			respondWithhtml(w, response.StatusBadRequest, getHtmlBodyForCode(response.StatusBadRequest))
 
 		case "/myproblem":
 			respondWithhtml(w, response.StatusBadRequest, getHtmlBodyForCode(response.StatusInternalServerError))
 		default:
+			binTarget := "/httpbin/stream/"
+			if strings.HasPrefix(target, binTarget) {
+				numResp, err := strconv.Atoi(target[len(binTarget):])
+				if err != nil {
+					fmt.Println(target[len(binTarget):])
+					respondWithhtml(w, response.StatusBadRequest, getHtmlBodyForCode(response.StatusBadRequest))
+					return
+				}
+				err = sendCunkedResponse(w, numResp)
+				if err != nil {
+					if errors.Is(err, ERROR_WHILE_GETTING_CHUNKED_BODY) {
+						respondWithhtml(w, response.StatusInternalServerError, getHtmlBodyForCode(response.StatusInternalServerError))
+					} else {
+						fmt.Printf("error while reading body: %s\n", err)
+					}
+				}
+				return
+			}
 			respondWithhtml(w, response.StatusOk, getHtmlBodyForCode(response.StatusOk))
 		}
 	})

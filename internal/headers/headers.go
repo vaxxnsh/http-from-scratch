@@ -87,6 +87,11 @@ func (h *Headers) Replace(name, value string) error {
 	return nil
 }
 
+func (h *Headers) Delete(name string) {
+	name = strings.ToLower(name)
+	delete(h.headers, name)
+}
+
 func (h *Headers) ForEach(cb func(n, v string)) {
 	for n, v := range h.headers {
 		cb(n, v)

@@ -30,6 +30,14 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return *h
 }
 
+func GetChunkedHeaders() headers.Headers {
+	h := headers.NewHeaders()
+	h.Set("Transfer-Encoding", "chunked")
+	h.Set("Connection", "close")
+	h.Set("Content-Type", "text/plain")
+	return *h
+}
+
 type Writer struct {
 	writer io.Writer
 }
