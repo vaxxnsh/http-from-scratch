@@ -73,6 +73,15 @@ func respondWithhtml(w *response.Writer, statusCode response.StatusCode, htmlBod
 	w.WriteBody(htmlBody)
 }
 
+func containsString(slice []string, target string) bool {
+	for _, s := range slice {
+		if strings.HasPrefix(target, s) {
+			return true
+		}
+	}
+	return false
+}
+
 func sendCunkedResponse(w *response.Writer, numResponses int) error {
 	res, err := http.Get(fmt.Sprintf("https://httpbin.org/stream/%d", numResponses))
 	if err != nil {
@@ -118,7 +127,7 @@ func main() {
 			respondWithhtml(w, response.StatusBadRequest, getHtmlBodyForCode(response.StatusInternalServerError))
 		default:
 			binTarget := "/httpbin/stream/"
-			videoTarget := "/prachi"
+			videoTargets := []string{"video", "/prachi"}
 			if strings.HasPrefix(target, binTarget) {
 				numResp, err := strconv.Atoi(target[len(binTarget):])
 				if err != nil {
@@ -134,7 +143,7 @@ func main() {
 						fmt.Printf("error while reading body: %s\n", err)
 					}
 				}
-			} else if strings.HasPrefix(target, videoTarget) {
+			} else if containsString(videoTargets, target) {
 				w.WriteStatusLine(response.StatusOk)
 				f, err := os.ReadFile("./assets/umm...mp4")
 				if err != nil {
