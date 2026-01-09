@@ -118,6 +118,7 @@ func main() {
 			respondWithhtml(w, response.StatusBadRequest, getHtmlBodyForCode(response.StatusInternalServerError))
 		default:
 			binTarget := "/httpbin/stream/"
+			videoTarget := "/prachi"
 			if strings.HasPrefix(target, binTarget) {
 				numResp, err := strconv.Atoi(target[len(binTarget):])
 				if err != nil {
@@ -133,9 +134,20 @@ func main() {
 						fmt.Printf("error while reading body: %s\n", err)
 					}
 				}
-				return
+			} else if strings.HasPrefix(target, videoTarget) {
+				w.WriteStatusLine(response.StatusOk)
+				f, err := os.ReadFile("./assets/umm...mp4")
+				if err != nil {
+					respondWithhtml(w, response.StatusInternalServerError, getHtmlBodyForCode(response.StatusInternalServerError))
+					return
+				}
+				h := response.GetDefaultHeaders(len(f[:]))
+				h.Replace("content-type", "video/mp4")
+				w.WriteHeaders(&h)
+				w.WriteBody(f[:])
+			} else {
+				respondWithhtml(w, response.StatusOk, getHtmlBodyForCode(response.StatusOk))
 			}
-			respondWithhtml(w, response.StatusOk, getHtmlBodyForCode(response.StatusOk))
 		}
 	})
 	if err != nil {
